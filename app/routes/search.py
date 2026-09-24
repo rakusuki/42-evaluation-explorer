@@ -11,7 +11,9 @@ from app.services.evaluation import evaluation_service
 router = APIRouter(prefix="/api", tags=["search"])
 
 
-def error_payload(exc: FortyTwoAPIError) -> dict[str, Any]:
+def error_payload(
+    exc: FortyTwoAPIError,
+) -> dict[str, Any]:
     return {
         "ok": False,
         "status_code": exc.status_code,
@@ -21,9 +23,15 @@ def error_payload(exc: FortyTwoAPIError) -> dict[str, Any]:
 
 
 @router.get("/projects/search")
-async def search_projects(q: str = Query(..., min_length=1), limit: int = Query(30, ge=1, le=100)) -> dict[str, Any]:
+async def search_projects(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(30, ge=1, le=100),
+) -> dict[str, Any]:
     try:
-        projects = await evaluation_service.search_projects(q, limit=limit)
+        projects = await evaluation_service.search_projects(
+            q,
+            limit=limit,
+        )
         return {
             "ok": True,
             "items": [
@@ -43,14 +51,24 @@ async def search_projects(q: str = Query(..., min_length=1), limit: int = Query(
 async def user_project_progress(
     login: str,
     project: str | None = None,
-    status: str | None = Query(None, pattern="^(finished|in_progress|waiting_for_correction|searching_a_group|creating_group|parent|any)$"),
+    status: str | None = Query(
+        None,
+        pattern=(
+            "^(finished|in_progress|"
+            "waiting_for_correction|searching_a_group|"
+            "creating_group|parent|any)$"
+        ),
+    ),
 ) -> dict[str, Any]:
     try:
         rows = await evaluation_service.user_projects(login)
     except FortyTwoAPIError as exc:
         return error_payload(exc)
 
-    compact = [evaluation_service.compact_project_user(item) for item in rows]
+    compact = [
+        evaluation_service.compact_project_user(item)
+        for item in rows
+    ]
 
     if project:
         needle = project.casefold()
@@ -58,53 +76,113 @@ async def user_project_progress(
             item
             for item in compact
             if str(item.get("project_id")) == project
-            or needle in str(item.get("project_name") or "").casefold()
+            or needle
+            in str(
+                item.get("project_name") or ""
+            ).casefold()
         ]
 
     if status and status != "any":
-        compact = [item for item in compact if item.get("status") == status]
+        compact = [
+            item
+            for item in compact
+            if item.get("status") == status
+        ]
 
-    return {"ok": True, "login": login, "items": compact}
+    return {
+        "ok": True,
+        "login": login,
+        "items": compact,
+    }
 
 
 @router.get("/reviews/{login}")
-async def review_candidates(login: str, project_id: int | None = None) -> dict[str, Any]:
-    """Return review-like records visible to the application's token.
+async def review_candidates(
+    login: str,
+    project: str | None = None,
+    project_id: int | None = None,
+    max_reviews: int = Query(
+        50,
+        ge=1,
+        le=100,
+    ),
+) -> dict[str, Any]:
+    """Aggregate visible Scale Team and Feedback comments.
 
-    This endpoint deliberately uses the user's scale-team history instead of
-    assuming that every 42 application can enumerate all evaluations globally.
-    The capability-probe endpoints expose 403/404 results separately.
+    project accepts a 42 project slug or numeric project ID as text.
+    project_id is retained for backward compatibility.
     """
+    resolved_project: dict[str, Any] | None = None
+    effective_project_id = project_id
+
+    if project:
+        try:
+            resolved_project = (
+                await evaluation_service.project(project)
+            )
+        except FortyTwoAPIError as exc:
+            return error_payload(exc)
+
+        resolved_id = resolved_project.get("id")
+        if not isinstance(resolved_id, int):
+            return {
+                "ok": False,
+                "status_code": 502,
+                "message": (
+                    "42 API project response did not contain "
+                    "a numeric project ID."
+                ),
+                "detail": resolved_project,
+            }
+
+        if (
+            project_id is not None
+            and project_id != resolved_id
+        ):
+            return {
+                "ok": False,
+                "status_code": 400,
+                "message": (
+                    "project and project_id refer to "
+                    "different projects."
+                ),
+                "detail": {
+                    "project": project,
+                    "resolved_project_id": resolved_id,
+                    "project_id": project_id,
+                },
+            }
+
+        effective_project_id = resolved_id
+
     try:
-        rows = await evaluation_service.scale_teams_as_corrected(login, max_pages=5)
+        items = await evaluation_service.aggregate_reviews(
+            login,
+            effective_project_id,
+            max_pages=5,
+            max_reviews=max_reviews,
+        )
     except FortyTwoAPIError as exc:
         return error_payload(exc)
 
-    if project_id is not None:
-        filtered: list[dict[str, Any]] = []
-        for item in rows:
-            team = item.get("team") or {}
-            if team.get("project_id") == project_id:
-                filtered.append(item)
-        rows = filtered
+    project_meta: dict[str, Any] | None = None
+    if resolved_project is not None:
+        project_meta = {
+            "id": resolved_project.get("id"),
+            "name": resolved_project.get("name"),
+            "slug": resolved_project.get("slug"),
+        }
+    elif effective_project_id is not None:
+        project_meta = {
+            "id": effective_project_id,
+            "name": None,
+            "slug": None,
+        }
 
-    items: list[dict[str, Any]] = []
-    for row in rows:
-        corrector = row.get("corrector") or {}
-        team = row.get("team") or {}
-        items.append(
-            {
-                "id": row.get("id"),
-                "team_id": row.get("team_id", team.get("id")),
-                "project_id": team.get("project_id"),
-                "begin_at": row.get("begin_at"),
-                "filled_at": row.get("filled_at"),
-                "final_mark": row.get("final_mark"),
-                "comment": row.get("comment"),
-                "corrector": corrector.get("login"),
-                "flag": row.get("flag"),
-                "raw": row,
-            }
-        )
-
-    return {"ok": True, "login": login, "items": items}
+    return {
+        "ok": True,
+        "login": login,
+        "project": project_meta,
+        "count": len(items),
+        "items": items,
+    }

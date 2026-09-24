@@ -1,21 +1,17 @@
 # 42 Evaluation Explorer
 
-42 APIを使い、Project進捗とEvaluation関連データの取得可否を調査するFastAPI MVPです。
+42 APIを使い、Project進捗とEvaluation関連データを調査・集約するFastAPIアプリです。
 
-## 目的
+## 現在の到達点
 
-最初のマイルストーンは、一般的な42 API Application資格情報で、以下のどこまで取得できるかを確認することです。
+実機Capability Probeで、通常のApplication tokenから以下のコメント経路を取得できることを確認しました。
 
-- User
-- Projects / projects_users
-- Teams
-- Scale Teams（被評価者 / 評価者側）
-- Scale Team comment / final_mark
-- Feedbacks
-- Team uploads
-- Project scales（権限制約確認用）
+- `scale_team.comment`
+- `feedback.comment`
 
-42 APIではエンドポイントごとに権限差があります。このアプリは403を単なる失敗ではなく、Capability Probeの結果として画面に表示します。
+一方、Project Scale定義の取得は現在のApplication tokenでは403となることを確認しています。
+
+v0.2.0では、特定ユーザーとProjectを指定し、Scale TeamコメントとFeedbackコメントを1つのレビュー一覧へ統合します。
 
 ## 技術構成
 
@@ -32,7 +28,7 @@ MVPではDBを使用しません。
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
@@ -63,12 +59,70 @@ OpenAPI：
 http://127.0.0.1:8000/docs
 ```
 
-## Capability Probe
+## Project Review Aggregation
+
+Project slugまたはIDを指定できます。
+
+```text
+GET /api/reviews/{login}?project=libft
+```
+
+レスポンスでは各Evaluationについて以下をまとめます。
+
+- Scale Team ID
+- Team ID
+- Project ID
+- final_mark
+- corrector
+- begin_at / filled_at
+- `scale_team.comment`
+- Feedback一覧
+- `feedback.comment`
+- comment source
+
+同じコメント本文がScale TeamとFeedbackの両方に現れる場合は、統合コメント一覧では重複を除外します。
+
+Feedback取得だけが失敗した場合はEvaluation全体を失敗させず、該当レコードの `feedback_error` に状態を残します。
+
+APIリクエスト数を抑えるため、1回の検索でFeedbackを補完するEvaluationはデフォルト50件、最大100件です。
+
+## Capability Report
+
+秘密情報やレビュー本文を含めない診断レポートを生成できます。
+
+```bash
+python -m scripts.probe_report \
+  --login YOUR_42_LOGIN \
+  --project libft
+```
+
+出力：
+
+```text
+reports/capability-report.json
+```
+
+`reports/` はGit管理対象外です。
+
+現在確認済みの結果：
+
+```json
+{
+  "accessible_comment_paths": [
+    "scale_team.comment",
+    "feedback.comment"
+  ],
+  "project_scales_access": "forbidden"
+}
+```
+
+## Capability Probe API
 
 主な検証用エンドポイント：
 
 ```text
 GET /api/test/token
+GET /api/test/report/{login}?project=libft
 GET /api/test/users/{login}
 GET /api/test/users/{login}/projects
 GET /api/test/users/{login}/teams
@@ -81,43 +135,11 @@ GET /api/test/scale-teams/{scale_team_id}/feedbacks
 GET /api/test/teams/{team_id}/uploads
 ```
 
-レスポンス例：
-
-```json
-{
-  "ok": false,
-  "status_code": 403,
-  "message": "42 API denied access to this resource. The endpoint may require extra roles or scopes.",
-  "detail": {}
-}
-```
-
-## MVP API
-
-UserのProject進捗：
+## Project進捗
 
 ```text
-GET /api/users/{login}/project-progress?project=a-maze-ing&status=finished
+GET /api/users/{login}/project-progress?project=libft&status=finished
 ```
-
-APIから見える被評価履歴：
-
-```text
-GET /api/reviews/{login}
-GET /api/reviews/{login}?project_id=1234
-```
-
-## 最初に確認する手順
-
-1. `/api/test/token` が成功することを確認
-2. 自分のloginで `/api/test/users/{login}` を確認
-3. `/api/test/users/{login}/projects` を確認
-4. `/api/test/users/{login}/scale-teams/as-corrected` を確認
-5. 返却されたScale Team IDで詳細・Feedbackを確認
-6. Team IDが得られた場合はTeam uploadsも確認
-7. `/projects/{id}/scales` の403有無を確認
-
-ここで得られたJSONを基に、通常のIntraに表示されるレビューコメントと、API上の `comment` / `feedback` / `teams_uploads.comment` のどれが一致するかを判定します。
 
 ## セキュリティ
 
@@ -125,37 +147,42 @@ GET /api/reviews/{login}?project_id=1234
 - Access Tokenはブラウザへ返しません
 - 任意URLを代理取得するAPIは提供しません
 - Raw probeも許可済みリソースのホワイトリストのみです
+- 42 OAuthユーザーログイン実装前はlocalhostで使用してください
 
-## 現時点の制約
+## 次の開発項目
 
-- 42 OAuthユーザーログインはまだ未実装です（Phase 2）
-- DB / キャッシュは未実装です
-- 複数ユーザー横断検索はAPI Capability確認後に追加します
-- ProjectのScale定義取得は42 API側で追加権限が必要な可能性があります
+- Projectを突破した複数Userの検索
+- 複数Userを横断したEvaluation集約
+- Level / Cursus / Project進捗による絞り込み
+- キャッシュとRate Limit最適化
+- 42 OAuthログイン
+- 公開時のデータ露出ルール
 
 ---
 
 # English
 
-A FastAPI MVP for exploring project progress and determining which evaluation-related data is actually exposed by the 42 API to a normal application token.
+A FastAPI application for probing and aggregating evaluation-related data exposed by the 42 API.
 
-## Goal
-
-Before building a large UI or database, this project probes access to users, projects, teams, scale teams, feedbacks, team uploads, and project scales. Permission errors such as HTTP 403 are treated as useful capability results.
+The current v0.2.0 implementation has verified access to `scale_team.comment` and `feedback.comment` for the tested application token and can aggregate both sources for a selected user and project.
 
 ## Run
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
 Configure `FT_CLIENT_ID` and `FT_CLIENT_SECRET` in `.env`. Never commit the secret.
 
-Open `http://127.0.0.1:8000` or `http://127.0.0.1:8000/docs`.
+## Review API
+
+```text
+GET /api/reviews/{login}?project=libft
+```
 
 ## License
 
@@ -163,4 +190,4 @@ MIT
 
 ## Deployment warning
 
-The current `0.1.0` MVP intentionally has no end-user OAuth gate. Do **not** expose it publicly with real 42 credentials yet. Keep it on localhost while verifying which evaluation data your application token can access. Public deployment belongs to Phase 2 after 42 OAuth authentication and data-exposure rules are implemented.
+v0.2.0 still has no end-user OAuth gate. Do **not** expose it publicly with real 42 credentials yet. Keep it on localhost until 42 OAuth authentication and data-exposure rules are implemented.

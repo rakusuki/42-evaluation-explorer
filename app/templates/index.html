@@ -2,82 +2,194 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
   <title>42 Evaluation Explorer</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <main class="container">
     <header>
-      <p class="eyebrow">42 API MVP</p>
+      <p class="eyebrow">42 API MVP v0.2.0</p>
       <h1>42 Evaluation Explorer</h1>
-      <p>特定ユーザー・Projectの進捗と、APIから取得可能なEvaluation情報を確認します。</p>
+      <p>
+        特定ユーザー・Projectの進捗と、
+        Scale Team / Feedbackコメントを確認します。
+      </p>
       {% if not credentials_configured %}
-      <div class="notice warning">FT_CLIENT_ID / FT_CLIENT_SECRET が未設定です。.env を作成してください。</div>
+      <div class="notice warning">
+        FT_CLIENT_ID / FT_CLIENT_SECRET が未設定です。
+        .env を作成してください。
+      </div>
       {% endif %}
     </header>
 
     <section class="panel">
       <h2>1. User / Project progress</h2>
-      <form id="progress-form" class="grid-form">
-        <label>42 login<input id="login" name="login" placeholder="e.g. yourlogin" required></label>
-        <label>Project name or ID<input id="project" name="project" placeholder="e.g. a-maze-ing"></label>
-        <label>Status
-          <select id="status" name="status">
+      <form
+        id="progress-form"
+        class="grid-form"
+      >
+        <label>
+          42 login
+          <input
+            id="login"
+            name="login"
+            placeholder="e.g. yourlogin"
+            required
+          >
+        </label>
+        <label>
+          Project name or ID
+          <input
+            id="project"
+            name="project"
+            placeholder="e.g. libft"
+          >
+        </label>
+        <label>
+          Status
+          <select
+            id="status"
+            name="status"
+          >
             <option value="any">Any</option>
             <option value="finished">finished</option>
             <option value="in_progress">in_progress</option>
-            <option value="waiting_for_correction">waiting_for_correction</option>
-            <option value="searching_a_group">searching_a_group</option>
-            <option value="creating_group">creating_group</option>
+            <option value="waiting_for_correction">
+              waiting_for_correction
+            </option>
+            <option value="searching_a_group">
+              searching_a_group
+            </option>
+            <option value="creating_group">
+              creating_group
+            </option>
             <option value="parent">parent</option>
           </select>
         </label>
         <button type="submit">Search</button>
       </form>
-      <div id="progress-result" class="result"></div>
+      <div
+        id="progress-result"
+        class="result"
+      ></div>
     </section>
 
     <section class="panel">
-      <h2>2. Review candidates</h2>
-      <p class="muted">42 APIが公開する <code>scale_teams/as_corrected</code> から取得できる範囲を表示します。</p>
-      <form id="review-form" class="grid-form">
-        <label>42 login<input id="review-login" required></label>
-        <label>Project ID (optional)<input id="review-project-id" type="number"></label>
-        <button type="submit">Load reviews</button>
+      <h2>2. Project review aggregation</h2>
+      <p class="muted">
+        実機Probeで取得可能と確認できた
+        <code>scale_team.comment</code> と
+        <code>feedback.comment</code> を統合します。
+      </p>
+      <form
+        id="review-form"
+        class="grid-form"
+      >
+        <label>
+          42 login
+          <input
+            id="review-login"
+            placeholder="e.g. ynishiuc"
+            required
+          >
+        </label>
+        <label>
+          Project slug or ID
+          <input
+            id="review-project"
+            placeholder="e.g. libft"
+            required
+          >
+        </label>
+        <button type="submit">
+          Load reviews
+        </button>
       </form>
-      <div id="review-result" class="result"></div>
+      <div
+        id="review-result"
+        class="result"
+      ></div>
     </section>
 
     <section class="panel">
       <h2>3. Capability Probe</h2>
-      <p class="muted">403 / 404も検証結果としてそのまま表示します。</p>
+      <p class="muted">
+        403 / 404も検証結果としてそのまま表示します。
+      </p>
       <div class="probe-grid">
-        <label>Login / Project slug or ID<input id="probe-value" placeholder="login or project slug"></label>
+        <label>
+          Login / Project slug or ID
+          <input
+            id="probe-value"
+            placeholder="login or project slug"
+          >
+        </label>
         <select id="probe-resource">
           <option value="user">User</option>
-          <option value="user_projects">User projects</option>
-          <option value="user_teams">User teams</option>
-          <option value="as_corrected">Scale teams as corrected</option>
-          <option value="as_corrector">Scale teams as corrector</option>
-          <option value="project">Project</option>
-          <option value="project_scales">Project scales (often restricted)</option>
+          <option value="user_projects">
+            User projects
+          </option>
+          <option value="user_teams">
+            User teams
+          </option>
+          <option value="as_corrected">
+            Scale teams as corrected
+          </option>
+          <option value="as_corrector">
+            Scale teams as corrector
+          </option>
+          <option value="project">
+            Project
+          </option>
+          <option value="project_scales">
+            Project scales (restricted)
+          </option>
         </select>
-        <button id="probe-button">Run probe</button>
+        <button id="probe-button">
+          Run probe
+        </button>
       </div>
-      <pre id="probe-result" class="json-output"></pre>
+      <pre
+        id="probe-result"
+        class="json-output"
+      ></pre>
     </section>
 
     <section class="panel">
       <h2>4. ID-based probes</h2>
       <div class="id-probes">
-        <label>Scale Team ID<input id="scale-team-id" type="number"></label>
-        <button data-probe="scale-team">Scale Team</button>
-        <button data-probe="feedbacks">Feedbacks</button>
-        <label>Team ID<input id="team-id" type="number"></label>
-        <button data-probe="uploads">Team uploads</button>
+        <label>
+          Scale Team ID
+          <input
+            id="scale-team-id"
+            type="number"
+          >
+        </label>
+        <button data-probe="scale-team">
+          Scale Team
+        </button>
+        <button data-probe="feedbacks">
+          Feedbacks
+        </button>
+        <label>
+          Team ID
+          <input
+            id="team-id"
+            type="number"
+          >
+        </label>
+        <button data-probe="uploads">
+          Team uploads
+        </button>
       </div>
-      <pre id="id-probe-result" class="json-output"></pre>
+      <pre
+        id="id-probe-result"
+        class="json-output"
+      ></pre>
     </section>
   </main>
   <script src="/static/app.js"></script>

@@ -29,8 +29,12 @@ button:hover { filter: brightness(1.08); }
 table { width: 100%; border-collapse: collapse; min-width: 680px; }
 th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { color: var(--muted); font-size: .85rem; }
-.comment { max-width: 420px; white-space: pre-wrap; }
+.comment { max-width: 520px; white-space: normal; }
+.review-comment { margin-bottom: 12px; white-space: pre-wrap; }
+.review-comment:last-child { margin-bottom: 0; }
+.comment-meta { color: var(--muted); font-size: .78rem; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .04em; }
 .notice { border-radius: 9px; padding: 10px 12px; margin: 10px 0; }
+.notice.compact { padding: 6px 8px; margin: 8px 0 0; font-size: .82rem; }
 .warning { border: 1px solid #775b2c; color: var(--warning); background: #241b0d; }
 .error { border: 1px solid #6d3737; color: var(--danger); background: #251111; }
 .muted { color: var(--muted); }
